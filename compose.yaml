@@ -1,0 +1,19 @@
+services:
+  database:
+    image: postgres:17.4-alpine
+    environment:
+      POSTGRES_USER: postgresadmin
+      POSTGRES_PASSWORD: postgresadmin
+      POSTGRES_DB: orders
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+
+volumes:
+  db_data:
+
+networks:
+  tpre814_network:
+    external: true
+    name: TPRE814
