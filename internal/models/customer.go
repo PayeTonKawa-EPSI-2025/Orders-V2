@@ -1,5 +1,7 @@
 package models
 
+import "gorm.io/gorm"
+
 type Customer struct {
-	ID uint `json:"id" gorm:"primaryKey;column:id"`
+	gorm.Model
 }

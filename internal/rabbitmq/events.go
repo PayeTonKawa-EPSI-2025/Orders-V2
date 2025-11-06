@@ -6,32 +6,17 @@ import (
 	"log"
 	"time"
 
+	"github.com/PayeTonKawa-EPSI-2025/Common/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common/models"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// EventType represents the type of event being published
-type EventType string
-
-const (
-	OrderCreated EventType = "order.created"
-	OrderUpdated EventType = "order.updated"
-	OrderDeleted EventType = "order.deleted"
-)
-
-// OrderEvent represents the structure of a order event
-type OrderEvent struct {
-	Type      EventType    `json:"type"`
-	Order     models.Order `json:"order"`
-	Timestamp time.Time    `json:"timestamp"`
-}
-
 // PublishOrderEvent publishes a order event to RabbitMQ
-func PublishOrderEvent(ch *amqp.Channel, eventType EventType, order models.Order) error {
+func PublishOrderEvent(ch *amqp.Channel, eventType events.EventType, order models.Order) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	event := OrderEvent{
+	event := events.OrderEvent{
 		Type:      eventType,
 		Order:     order,
 		Timestamp: time.Now(),

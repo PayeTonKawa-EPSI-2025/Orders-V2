@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/PayeTonKawa-EPSI-2025/Common/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common/models"
 	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/dto"
 	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/rabbitmq"
@@ -81,7 +82,7 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 			resp.Body = order
 
 			// Publish order created event
-			err := rabbitmq.PublishOrderEvent(ch, rabbitmq.OrderCreated, order)
+			err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, order)
 			if err != nil {
 				// Log the error but don't fail the request
 				// The order was already created in the database
@@ -129,7 +130,7 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		resp.Body = order
 
 		// Publish order updated event
-		err := rabbitmq.PublishOrderEvent(ch, rabbitmq.OrderUpdated, order)
+		err := rabbitmq.PublishOrderEvent(ch, events.OrderUpdated, order)
 		if err != nil {
 			// Log the error but don't fail the request
 			// The order was already updated in the database
@@ -166,7 +167,7 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		if results.Error == nil {
 			// Publish order deleted event
-			err := rabbitmq.PublishOrderEvent(ch, rabbitmq.OrderDeleted, order)
+			err := rabbitmq.PublishOrderEvent(ch, events.OrderDeleted, order)
 			if err != nil {
 				// Log the error but don't fail the request
 				// The order was already deleted from the database
