@@ -1,4 +1,14 @@
 services:
+  api:
+    image: ghcr.io/payetonkawa-epsi-2025/orders/paye-ton-kawa--orders
+    environment:
+      - DATABASE_DSN=postgres://postgresadmin:postgresadmin@database:5432/orders
+      - RABBIT_DSN=amqp://guest:guest@rabbit:5672
+    ports:
+      - 8082:8082
+    networks:
+      - default
+      - tpre814_network
   database:
     image: postgres:17.4-alpine
     environment:
