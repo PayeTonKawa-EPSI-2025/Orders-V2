@@ -95,7 +95,6 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		order := models.Order{
 			CustomerID: input.Body.CustomerID,
-			Products:   input.Body.Products,
 		}
 
 		// Create order in the database
@@ -115,11 +114,29 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 			fmt.Printf("Failed to create CustomerOrder record: %v\n", err)
 		}
 
+		var orderProducts []localModels.OrderProduct
+
+		for _, productID := range input.Body.ProductIDs {
+			orderProducts = append(orderProducts, localModels.OrderProduct{
+				OrderID:   order.ID,
+				ProductID: productID,
+			})
+		}
+
+		if err := dbConn.Create(&orderProducts).Error; err != nil {
+			fmt.Printf("Failed to create OrderProduct records: %v\n", err)
+		}
+
 		// Prepare response
 		resp.Body = order
 
 		// Publish order created event
-		if err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, order); err != nil {
+		var simplifiedOrder = events.SimplifiedOrder{
+			OrderID:    order.ID,
+			CustomerID: input.Body.CustomerID,
+			ProductIDs: input.Body.ProductIDs,
+		}
+		if err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, simplifiedOrder); err != nil {
 			// Log error but do not fail the request
 			fmt.Printf("Failed to publish order event: %v\n", err)
 		}
@@ -151,7 +168,6 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		updates := models.Order{
 			CustomerID: input.Body.CustomerID,
-			Products:   input.Body.Products,
 		}
 
 		results = dbConn.Model(&order).Updates(updates)
@@ -164,7 +180,11 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		resp.Body = order
 
 		// Publish order updated event
-		err := rabbitmq.PublishOrderEvent(ch, events.OrderUpdated, order)
+		var simplifiedOrder = events.SimplifiedOrder{
+			OrderID:    order.ID,
+			CustomerID: order.CustomerID,
+		}
+		err := rabbitmq.PublishOrderEvent(ch, events.OrderUpdated, simplifiedOrder)
 		if err != nil {
 			// Log the error but don't fail the request
 			// The order was already updated in the database
@@ -201,7 +221,11 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		if results.Error == nil {
 			// Publish order deleted event
-			err := rabbitmq.PublishOrderEvent(ch, events.OrderDeleted, order)
+			var simplifiedOrder = events.SimplifiedOrder{
+				OrderID:    order.ID,
+				CustomerID: order.CustomerID,
+			}
+			err := rabbitmq.PublishOrderEvent(ch, events.OrderDeleted, simplifiedOrder)
 			if err != nil {
 				// Log the error but don't fail the request
 				// The order was already deleted from the database

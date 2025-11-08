@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"github.com/PayeTonKawa-EPSI-2025/Common/events"
-	"github.com/PayeTonKawa-EPSI-2025/Common/models"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // PublishOrderEvent publishes a order event to RabbitMQ
-func PublishOrderEvent(ch *amqp.Channel, eventType events.EventType, order models.Order) error {
+func PublishOrderEvent(ch *amqp.Channel, eventType events.EventType, order events.SimplifiedOrder) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -48,6 +47,6 @@ func PublishOrderEvent(ch *amqp.Channel, eventType events.EventType, order model
 		return err
 	}
 
-	log.Printf("Published %s event for order %d", eventType, order.ID)
+	log.Printf("Published %s event for order %d", eventType, order.OrderID)
 	return nil
 }
