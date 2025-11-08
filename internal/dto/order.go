@@ -14,7 +14,7 @@ type OrderOutput struct {
 
 type OrderCreateInput struct {
 	Body struct {
-		CustomerID string           `json:"customerId"`
+		CustomerID uint             `json:"customerId"`
 		Products   []models.Product `json:"products,omitempty"`
 	}
 }
