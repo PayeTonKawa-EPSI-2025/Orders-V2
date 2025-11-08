@@ -18,3 +18,7 @@ type OrderCreateInput struct {
 		Products   []models.Product `json:"products,omitempty"`
 	}
 }
+
+type CustomerOrdersInput struct {
+	CustomerID uint `json:"customerId" path:"customerId"`
+}
