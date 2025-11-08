@@ -3,11 +3,13 @@ package operation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/PayeTonKawa-EPSI-2025/Common/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common/models"
 	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/dto"
+	localModels "github.com/PayeTonKawa-EPSI-2025/Orders/internal/models"
 	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/rabbitmq"
 	"github.com/danielgtaylor/huma/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -62,8 +64,28 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 	})
 
 	huma.Register(api, huma.Operation{
+		OperationID:   "get-customer-orders",
+		Summary:       "Get all orders for a customer",
+		Method:        http.MethodGet,
+		DefaultStatus: http.StatusOK,
+		Path:          "/orders/{customerId}/customers",
+		Tags:          []string{"orders"},
+	}, func(ctx context.Context, input *dto.CustomerOrdersInput) (*dto.OrdersOutput, error) {
+		resp := &dto.OrdersOutput{}
+
+		var orders []models.Order
+		if err := dbConn.Where("customer_id = ?", input.CustomerID).Find(&orders).Error; err != nil {
+			return nil, err
+		}
+
+		resp.Body.Orders = orders
+
+		return resp, nil
+	})
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "create-order",
-		Summary:       "Create a order",
+		Summary:       "Create an order",
 		Method:        http.MethodPost,
 		DefaultStatus: http.StatusCreated,
 		Path:          "/orders",
@@ -76,21 +98,33 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 			Products:   input.Body.Products,
 		}
 
+		// Create order in the database
 		results := dbConn.Create(&order)
-
-		if results.Error == nil {
-			resp.Body = order
-
-			// Publish order created event
-			err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, order)
-			if err != nil {
-				// Log the error but don't fail the request
-				// The order was already created in the database
-				return resp, nil
-			}
+		if results.Error != nil {
+			return resp, results.Error
 		}
 
-		return resp, results.Error
+		// Create CustomerOrder relationship
+		customerOrder := localModels.CustomerOrder{
+			CustomerID: input.Body.CustomerID,
+			OrderID:    order.ID,
+		}
+
+		if err := dbConn.Create(&customerOrder).Error; err != nil {
+			// Log this but don't fail the order creation itself
+			fmt.Printf("Failed to create CustomerOrder record: %v\n", err)
+		}
+
+		// Prepare response
+		resp.Body = order
+
+		// Publish order created event
+		if err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, order); err != nil {
+			// Log error but do not fail the request
+			fmt.Printf("Failed to publish order event: %v\n", err)
+		}
+
+		return resp, nil
 	})
 
 	huma.Register(api, huma.Operation{
