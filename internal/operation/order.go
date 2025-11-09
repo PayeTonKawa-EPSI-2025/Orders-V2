@@ -122,60 +122,6 @@ func GetOrdersByIdCustomer(ctx context.Context, db *gorm.DB, id uint) (*dto.Orde
 	return resp, nil
 }
 
-func CreateOrder(ctx context.Context, db *gorm.DB, input *dto.OrderCreateInput) (*dto.OrderOutput, error) {
-	resp := &dto.OrderOutput{}
-
-	order := models.Order{
-		CustomerID: input.Body.CustomerID,
-	}
-
-	// Create order in the database
-	results := db.Create(&order)
-	if results.Error != nil {
-		return resp, results.Error
-	}
-
-	// Create CustomerOrder relationship
-	customerOrder := localModels.CustomerOrder{
-		CustomerID: input.Body.CustomerID,
-		OrderID:    order.ID,
-	}
-
-	if err := db.Create(&customerOrder).Error; err != nil {
-		// Log this but don't fail the order creation itself
-		fmt.Printf("Failed to create CustomerOrder record: %v\n", err)
-	}
-
-	var orderProducts []localModels.OrderProduct
-
-	for _, productID := range input.Body.ProductIDs {
-		orderProducts = append(orderProducts, localModels.OrderProduct{
-			OrderID:   order.ID,
-			ProductID: productID,
-		})
-	}
-
-	if err := db.Create(&orderProducts).Error; err != nil {
-		fmt.Printf("Failed to create OrderProduct records: %v\n", err)
-	}
-
-	// Prepare response
-	resp.Body = order
-
-	// Publish order created event
-	var simplifiedOrder = events.SimplifiedOrder{
-		OrderID:    order.ID,
-		CustomerID: input.Body.CustomerID,
-		ProductIDs: input.Body.ProductIDs,
-	}
-	if err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, simplifiedOrder); err != nil {
-		// Log error but do not fail the request
-		fmt.Printf("Failed to publish order event: %v\n", err)
-	}
-
-	return resp, nil
-}
-
 // ----------------------
 // Register routes with Huma
 // ----------------------
