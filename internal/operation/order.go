@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/PayeTonKawa-EPSI-2025/Common/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common/models"
@@ -99,6 +101,38 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		if err := dbConn.Where("customer_id = ?", input.CustomerID).Find(&orders).Error; err != nil {
 			return nil, err
 		}
+
+		productsURL := os.Getenv("PRODUCTS_URL")
+		client := &http.Client{Timeout: 5 * time.Second}
+		var wg sync.WaitGroup
+
+		for i := range orders {
+			wg.Add(1)
+			go func(order *models.Order) {
+				defer wg.Done()
+
+				url := fmt.Sprintf("%s/products/%d/orders", productsURL, order.ID)
+				r, err := client.Get(url)
+				if err != nil {
+					fmt.Printf("Failed to fetch products for order %d: %v\n", order.ID, err)
+					return
+				}
+				defer r.Body.Close()
+
+				if r.StatusCode == http.StatusOK {
+					var productsResp dto.ProductsOutputBody
+					if err := json.NewDecoder(r.Body).Decode(&productsResp); err != nil {
+						fmt.Printf("Failed to decode products for order %d: %v\n", order.ID, err)
+						return
+					}
+					order.Products = productsResp.Products
+				} else {
+					fmt.Printf("Products API for order %d returned status %d\n", order.ID, r.StatusCode)
+				}
+			}(&orders[i])
+		}
+
+		wg.Wait()
 
 		resp.Body.Orders = orders
 
