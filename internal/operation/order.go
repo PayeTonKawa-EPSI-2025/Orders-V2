@@ -76,7 +76,7 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 			if err := json.NewDecoder(r.Body).Decode(&productsResp); err != nil {
 				fmt.Printf("Failed to decode products response: %v\n", err)
 			} else {
-				resp.Body.Orders = productsResp.Products
+				resp.Body.Products = productsResp.Products
 			}
 		} else {
 			fmt.Printf("Products API returned status %d\n", r.StatusCode)
