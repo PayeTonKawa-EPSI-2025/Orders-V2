@@ -2,9 +2,13 @@ package operation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"sync"
+	"time"
 
 	"github.com/PayeTonKawa-EPSI-2025/Common/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common/models"
@@ -51,16 +55,36 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		var order models.Order
 		results := dbConn.First(&order, input.Id)
 
-		if results.Error == nil {
-			resp.Body = order
+		if results.Error != nil {
+			if errors.Is(results.Error, gorm.ErrRecordNotFound) {
+				return nil, huma.NewError(http.StatusNotFound, "Order not found")
+			}
+			return nil, results.Error
+		}
+
+		resp.Body = order
+
+		products_url := os.Getenv("PRODUCTS_URL")
+		url := fmt.Sprintf("%s/products/%d/orders", products_url, order.ID)
+		r, err := http.Get(url)
+		if err != nil {
+			fmt.Printf("Failed to fetch products: %v\n", err)
 			return resp, nil
 		}
+		defer r.Body.Close()
 
-		if errors.Is(results.Error, gorm.ErrRecordNotFound) {
-			return nil, huma.NewError(http.StatusNotFound, "Order not found")
+		if r.StatusCode == http.StatusOK {
+			var productsResp dto.ProductsOutputBody
+			if err := json.NewDecoder(r.Body).Decode(&productsResp); err != nil {
+				fmt.Printf("Failed to decode products response: %v\n", err)
+			} else {
+				resp.Body.Products = productsResp.Products
+			}
+		} else {
+			fmt.Printf("Products API returned status %d\n", r.StatusCode)
 		}
 
-		return nil, results.Error
+		return resp, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -77,6 +101,38 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		if err := dbConn.Where("customer_id = ?", input.CustomerID).Find(&orders).Error; err != nil {
 			return nil, err
 		}
+
+		productsURL := os.Getenv("PRODUCTS_URL")
+		client := &http.Client{Timeout: 5 * time.Second}
+		var wg sync.WaitGroup
+
+		for i := range orders {
+			wg.Add(1)
+			go func(order *models.Order) {
+				defer wg.Done()
+
+				url := fmt.Sprintf("%s/products/%d/orders", productsURL, order.ID)
+				r, err := client.Get(url)
+				if err != nil {
+					fmt.Printf("Failed to fetch products for order %d: %v\n", order.ID, err)
+					return
+				}
+				defer r.Body.Close()
+
+				if r.StatusCode == http.StatusOK {
+					var productsResp dto.ProductsOutputBody
+					if err := json.NewDecoder(r.Body).Decode(&productsResp); err != nil {
+						fmt.Printf("Failed to decode products for order %d: %v\n", order.ID, err)
+						return
+					}
+					order.Products = productsResp.Products
+				} else {
+					fmt.Printf("Products API for order %d returned status %d\n", order.ID, r.StatusCode)
+				}
+			}(&orders[i])
+		}
+
+		wg.Wait()
 
 		resp.Body.Orders = orders
 
@@ -95,7 +151,6 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		order := models.Order{
 			CustomerID: input.Body.CustomerID,
-			Products:   input.Body.Products,
 		}
 
 		// Create order in the database
@@ -115,11 +170,29 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 			fmt.Printf("Failed to create CustomerOrder record: %v\n", err)
 		}
 
+		var orderProducts []localModels.OrderProduct
+
+		for _, productID := range input.Body.ProductIDs {
+			orderProducts = append(orderProducts, localModels.OrderProduct{
+				OrderID:   order.ID,
+				ProductID: productID,
+			})
+		}
+
+		if err := dbConn.Create(&orderProducts).Error; err != nil {
+			fmt.Printf("Failed to create OrderProduct records: %v\n", err)
+		}
+
 		// Prepare response
 		resp.Body = order
 
 		// Publish order created event
-		if err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, order); err != nil {
+		var simplifiedOrder = events.SimplifiedOrder{
+			OrderID:    order.ID,
+			CustomerID: input.Body.CustomerID,
+			ProductIDs: input.Body.ProductIDs,
+		}
+		if err := rabbitmq.PublishOrderEvent(ch, events.OrderCreated, simplifiedOrder); err != nil {
 			// Log error but do not fail the request
 			fmt.Printf("Failed to publish order event: %v\n", err)
 		}
@@ -151,7 +224,6 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		updates := models.Order{
 			CustomerID: input.Body.CustomerID,
-			Products:   input.Body.Products,
 		}
 
 		results = dbConn.Model(&order).Updates(updates)
@@ -164,7 +236,11 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		resp.Body = order
 
 		// Publish order updated event
-		err := rabbitmq.PublishOrderEvent(ch, events.OrderUpdated, order)
+		var simplifiedOrder = events.SimplifiedOrder{
+			OrderID:    order.ID,
+			CustomerID: order.CustomerID,
+		}
+		err := rabbitmq.PublishOrderEvent(ch, events.OrderUpdated, simplifiedOrder)
 		if err != nil {
 			// Log the error but don't fail the request
 			// The order was already updated in the database
@@ -201,7 +277,11 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 
 		if results.Error == nil {
 			// Publish order deleted event
-			err := rabbitmq.PublishOrderEvent(ch, events.OrderDeleted, order)
+			var simplifiedOrder = events.SimplifiedOrder{
+				OrderID:    order.ID,
+				CustomerID: order.CustomerID,
+			}
+			err := rabbitmq.PublishOrderEvent(ch, events.OrderDeleted, simplifiedOrder)
 			if err != nil {
 				// Log the error but don't fail the request
 				// The order was already deleted from the database

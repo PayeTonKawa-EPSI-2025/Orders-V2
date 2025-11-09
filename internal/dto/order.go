@@ -14,11 +14,15 @@ type OrderOutput struct {
 
 type OrderCreateInput struct {
 	Body struct {
-		CustomerID uint             `json:"customerId"`
-		Products   []models.Product `json:"products,omitempty"`
+		CustomerID uint   `json:"customerId"`
+		ProductIDs []uint `json:"productIds"`
 	}
 }
 
 type CustomerOrdersInput struct {
 	CustomerID uint `json:"customerId" path:"customerId"`
+}
+
+type ProductsOutputBody struct {
+	Products []models.Product `json:"products"`
 }
