@@ -2,9 +2,11 @@ package operation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/PayeTonKawa-EPSI-2025/Common/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common/models"
@@ -51,16 +53,36 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		var order models.Order
 		results := dbConn.First(&order, input.Id)
 
-		if results.Error == nil {
-			resp.Body = order
+		if results.Error != nil {
+			if errors.Is(results.Error, gorm.ErrRecordNotFound) {
+				return nil, huma.NewError(http.StatusNotFound, "Order not found")
+			}
+			return nil, results.Error
+		}
+
+		resp.Body = order
+
+		products_url := os.Getenv("PRODUCTS_URL")
+		url := fmt.Sprintf("%s/products/%d/orders", products_url, order.ID)
+		r, err := http.Get(url)
+		if err != nil {
+			fmt.Printf("Failed to fetch products: %v\n", err)
 			return resp, nil
 		}
+		defer r.Body.Close()
 
-		if errors.Is(results.Error, gorm.ErrRecordNotFound) {
-			return nil, huma.NewError(http.StatusNotFound, "Order not found")
+		if r.StatusCode == http.StatusOK {
+			var productsResp dto.ProductsOutputBody
+			if err := json.NewDecoder(r.Body).Decode(&productsResp); err != nil {
+				fmt.Printf("Failed to decode products response: %v\n", err)
+			} else {
+				resp.Body.Orders = productsResp.Products
+			}
+		} else {
+			fmt.Printf("Products API returned status %d\n", r.StatusCode)
 		}
 
-		return nil, results.Error
+		return resp, nil
 	})
 
 	huma.Register(api, huma.Operation{
