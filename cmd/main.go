@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/humacli"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/metrics"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 )
@@ -50,6 +51,16 @@ func main() {
 		router.Use(middleware.Logger)
 		router.Use(middleware.Recoverer)
 		router.Use(middleware.Compress(5))
+
+		router.Use(metrics.Collector(metrics.CollectorOpts{
+			Host:  false,
+			Proto: true,
+			Skip: func(r *http.Request) bool {
+				return r.Method != "OPTIONS"
+			},
+		}))
+
+		router.Handle("/metrics", metrics.Handler())
 
 		configs := huma.DefaultConfig("Paye Ton Kawa - Orders", "1.0.0")
 		api := humachi.New(router, configs)
