@@ -1,13 +1,13 @@
 # Variables
 BINARY=build/paye-ton-kawa--orders
-DOCKER_IMAGE=ghcr.io/payetonkawa-epsi-2025/orders/paye-ton-kawa--orders
+DOCKER_IMAGE=ghcr.io/payetonkawa-epsi-2025/orders-v2/paye-ton-kawa--orders
 SRC=cmd/main.go
 
 build: $(BINARY)
 
 $(BINARY): $(SRC)
 	@mkdir -p build
-	GOPRIVATE=github.com/PayeTonKawa-EPSI-2025/* GOOS=linux GOARCH=amd64 go build -o $@ $<
+	GOOS=linux GOARCH=amd64 go build -o $@ $<
 
 build-image: build
 	@if [ -z "$(VERSION)" ]; then \

@@ -1,6 +1,6 @@
 services:
   api:
-    image: ghcr.io/payetonkawa-epsi-2025/orders/paye-ton-kawa--orders
+    image: ghcr.io/payetonkawa-epsi-2025/orders-v2/paye-ton-kawa--orders
     container_name: orders-api
     environment:
       - DATABASE_DSN=postgres://postgresadmin:postgresadmin@database:5432/orders

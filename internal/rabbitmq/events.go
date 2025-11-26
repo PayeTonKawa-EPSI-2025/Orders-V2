@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/PayeTonKawa-EPSI-2025/Common/events"
+	"github.com/PayeTonKawa-EPSI-2025/Common-V2/events"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

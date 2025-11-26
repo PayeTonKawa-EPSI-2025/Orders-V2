@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/PayeTonKawa-EPSI-2025/Common/events"
+	"github.com/PayeTonKawa-EPSI-2025/Common-V2/events"
 )
 
 // DebugEventHandlers provides handlers for debugging purposes

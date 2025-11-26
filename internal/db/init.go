@@ -7,9 +7,9 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/PayeTonKawa-EPSI-2025/Common/models"
+	"github.com/PayeTonKawa-EPSI-2025/Common-V2/models"
 
-	localModels "github.com/PayeTonKawa-EPSI-2025/Orders/internal/models"
+	localModels "github.com/PayeTonKawa-EPSI-2025/Orders-V2/internal/models"
 )
 
 func Init() *gorm.DB {

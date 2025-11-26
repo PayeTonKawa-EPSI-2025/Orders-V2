@@ -1,6 +1,6 @@
 package models
 
-import "github.com/PayeTonKawa-EPSI-2025/Common/models"
+import "github.com/PayeTonKawa-EPSI-2025/Common-V2/models"
 
 type CustomerOrder struct {
 	ID         uint         `json:"id" gorm:"primaryKey"`

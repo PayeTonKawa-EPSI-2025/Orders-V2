@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/db"
-	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/operation"
-	"github.com/PayeTonKawa-EPSI-2025/Orders/internal/rabbitmq"
+	"github.com/PayeTonKawa-EPSI-2025/Orders-V2/internal/db"
+	"github.com/PayeTonKawa-EPSI-2025/Orders-V2/internal/operation"
+	"github.com/PayeTonKawa-EPSI-2025/Orders-V2/internal/rabbitmq"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/danielgtaylor/huma/v2/humacli"
