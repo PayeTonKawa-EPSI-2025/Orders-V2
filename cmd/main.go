@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/metrics"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
+	"github.com/PayeTonKawa-EPSI-2025/Common-V2/auth"
 )
 
 // Options for the CLI.
@@ -32,6 +33,7 @@ var (
 func main() {
 	_ = godotenv.Load()
 	dbConn = db.Init()
+	auth.InitKeycloak()
 	conn, ch := rabbitmq.Connect()
 
 	// Set up event handlers
@@ -45,12 +47,20 @@ func main() {
 
 	// Create a CLI app which takes a port option.
 	cli := humacli.New(func(hooks humacli.Hooks, options *Options) {
+		auth.InitKeycloak()
 		// Create a new router & API
 		router := chi.NewMux()
 
+		router.Use(auth.JWTMiddleware)
 		router.Use(middleware.Logger)
 		router.Use(middleware.Recoverer)
 		router.Use(middleware.Compress(5))
+
+		router.With(auth.RequireRole("orders.read")).
+			Get("/orders", listOrders)
+
+		router.With(auth.RequireRole("orders.write")).
+			Post("/orders", createOrder)
 
 		router.Use(metrics.Collector(metrics.CollectorOpts{
 			Host:  false,
