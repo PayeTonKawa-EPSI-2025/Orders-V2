@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PayeTonKawa-EPSI-2025/Common-V2/auth"
 	"github.com/PayeTonKawa-EPSI-2025/Common-V2/events"
 	"github.com/PayeTonKawa-EPSI-2025/Common-V2/models"
 	"github.com/PayeTonKawa-EPSI-2025/Orders-V2/internal/dto"
@@ -21,25 +22,67 @@ import (
 )
 
 // ----------------------
+// Helper Functions
+// ----------------------
+
+func isAdmin(claims *auth.Claims) bool {
+	for _, role := range claims.Roles {
+		if role == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
+func checkOrderOwnership(db *gorm.DB, orderID uint, customerID uint) bool {
+	var order models.Order
+	if err := db.First(&order, orderID).Error; err != nil {
+		return false
+	}
+	return order.CustomerID == customerID
+}
+
+// ----------------------
 // Extracted CRUD Functions
 // ----------------------
 
 // Get all orders
 func GetOrders(ctx context.Context, db *gorm.DB) (*dto.OrdersOutput, error) {
+
+	claims, ok := auth.GetClaims(ctx)
+	if !ok {
+		return nil, huma.NewError(http.StatusUnauthorized, "Unauthorized")
+	}
+
 	resp := &dto.OrdersOutput{}
 
 	var orders []models.Order
-	results := db.Find(&orders)
-
-	if results.Error == nil {
-		resp.Body.Orders = orders
+	if isAdmin(claims) {
+		// Admin can see all orders
+		results := db.Find(&orders)
+		if results.Error != nil {
+			return nil, results.Error
+		}
+	} else {
+		// User can only see their own orders
+		results := db.Where("customer_id = ?", claims.PreferredUsername).Find(&orders)
+		if results.Error != nil {
+			return nil, results.Error
+		}
 	}
 
-	return resp, results.Error
+	resp.Body.Orders = orders
+
+	return resp, nil
 }
 
 // Get a single order by ID
 func GetOrder(ctx context.Context, db *gorm.DB, id uint) (*dto.OrderOutput, error) {
+	claims, ok := auth.GetClaims(ctx)
+	if !ok {
+		return nil, huma.NewError(http.StatusUnauthorized, "Unauthorized")
+	}
+
 	resp := &dto.OrderOutput{}
 
 	var order models.Order
@@ -50,6 +93,10 @@ func GetOrder(ctx context.Context, db *gorm.DB, id uint) (*dto.OrderOutput, erro
 			return nil, huma.NewError(http.StatusNotFound, "Order not found")
 		}
 		return nil, results.Error
+	}
+
+	if !isAdmin(claims) && fmt.Sprintf("%d", order.CustomerID) != claims.PreferredUsername {
+		return nil, huma.NewError(http.StatusForbidden, "Forbidden: You can only access your own orders")
 	}
 
 	resp.Body = order
@@ -78,6 +125,17 @@ func GetOrder(ctx context.Context, db *gorm.DB, id uint) (*dto.OrderOutput, erro
 }
 
 func GetOrdersByIdCustomer(ctx context.Context, db *gorm.DB, id uint) (*dto.OrdersOutput, error) {
+	
+	claims, ok := auth.GetClaims(ctx)
+	if !ok {
+		return nil, huma.NewError(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	// Only admin can access this endpoint or user accessing their own orders
+	if !isAdmin(claims) && claims.PreferredUsername != fmt.Sprintf("%d", id) {
+		return nil, huma.NewError(http.StatusForbidden, "Forbidden: You can only access your own orders")
+	}
+	
 	resp := &dto.OrdersOutput{}
 
 	var orders []models.Order
@@ -134,6 +192,9 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		Method:      http.MethodGet,
 		Path:        "/orders",
 		Tags:        []string{"orders"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
 	}, func(ctx context.Context, input *struct{}) (*dto.OrdersOutput, error) {
 		return GetOrders(ctx, dbConn)
 	})
@@ -144,6 +205,9 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		Method:      http.MethodGet,
 		Path:        "/orders/{id}",
 		Tags:        []string{"orders"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
 	}, func(ctx context.Context, input *struct {
 		Id uint `path:"id"`
 	}) (*dto.OrderOutput, error) {
@@ -157,6 +221,9 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		DefaultStatus: http.StatusOK,
 		Path:          "/orders/{customerId}/customers",
 		Tags:          []string{"orders"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
 	}, func(ctx context.Context, input *dto.CustomerOrdersInput) (*dto.OrdersOutput, error) {
 		return GetOrdersByIdCustomer(ctx, dbConn, input.CustomerID)
 	})
@@ -168,7 +235,29 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		DefaultStatus: http.StatusCreated,
 		Path:          "/orders",
 		Tags:          []string{"orders"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
 	}, func(ctx context.Context, input *dto.OrderCreateInput) (*dto.OrderOutput, error) {
+		
+		claims, ok := auth.GetClaims(ctx)
+		if !ok {
+			return nil, huma.NewError(http.StatusUnauthorized, "Unauthorized")
+		}
+
+		// Users can create orders, but only for themselves
+		// Override the CustomerID with the authenticated user's ID
+		var customerID uint
+		if isAdmin(claims) && input.Body.CustomerID != 0 {
+			customerID = input.Body.CustomerID
+		} else {
+			// Parse PreferredUsername as uint
+			_, parseErr := fmt.Sscanf(claims.PreferredUsername, "%d", &customerID)
+			if parseErr != nil {
+				customerID = input.Body.CustomerID
+			}
+		}
+		
 		resp := &dto.OrderOutput{}
 
 		order := models.Order{
@@ -228,10 +317,24 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		Method:      http.MethodPut,
 		Path:        "/orders/{id}",
 		Tags:        []string{"orders"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
 	}, func(ctx context.Context, input *struct {
 		Id uint `path:"id"`
 		dto.OrderCreateInput
 	}) (*dto.OrderOutput, error) {
+		
+		claims, ok := auth.GetClaims(ctx)
+		if !ok {
+			return nil, huma.NewError(http.StatusUnauthorized, "Unauthorized")
+		}
+
+		// Only admin can update orders
+		if !isAdmin(claims) {
+			return nil, huma.NewError(http.StatusForbidden, "Forbidden: Only admins can update orders")
+		}
+
 		resp := &dto.OrderOutput{}
 
 		var order models.Order
@@ -278,9 +381,22 @@ func RegisterOrdersRoutes(api huma.API, dbConn *gorm.DB, ch *amqp.Channel) {
 		DefaultStatus: http.StatusNoContent,
 		Path:          "/orders/{id}",
 		Tags:          []string{"orders"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
 	}, func(ctx context.Context, input *struct {
 		Id uint `path:"id"`
 	}) (*struct{}, error) {
+		
+		claims, ok := auth.GetClaims(ctx)
+		if !ok {
+			return nil, huma.NewError(http.StatusUnauthorized, "Unauthorized")
+		}
+
+		// Only admin can delete orders
+		if !isAdmin(claims) {
+			return nil, huma.NewError(http.StatusForbidden, "Forbidden: Only admins can delete orders")
+		}
 		resp := &struct{}{}
 
 		// First get the order to have the complete data for the event

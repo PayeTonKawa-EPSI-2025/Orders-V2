@@ -47,20 +47,13 @@ func main() {
 
 	// Create a CLI app which takes a port option.
 	cli := humacli.New(func(hooks humacli.Hooks, options *Options) {
-		auth.InitKeycloak()
 		// Create a new router & API
 		router := chi.NewMux()
 
-		router.Use(auth.JWTMiddleware)
 		router.Use(middleware.Logger)
 		router.Use(middleware.Recoverer)
 		router.Use(middleware.Compress(5))
 
-		router.With(auth.RequireRole("orders.read")).
-			Get("/orders", listOrders)
-
-		router.With(auth.RequireRole("orders.write")).
-			Post("/orders", createOrder)
 
 		router.Use(metrics.Collector(metrics.CollectorOpts{
 			Host:  false,
@@ -69,13 +62,28 @@ func main() {
 				return r.Method != "OPTIONS"
 			},
 		}))
-
+		
 		router.Handle("/metrics", metrics.Handler())
 
 		configs := huma.DefaultConfig("Paye Ton Kawa - Orders", "1.0.0")
+
+		configs.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
+			"bearer": {
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+				Description:  "JWT Bearer token authentication",
+			},
+		}
+
 		api := humachi.New(router, configs)
 
-		operation.RegisterOrdersRoutes(api, dbConn, ch)
+		router.Group(func(r chi.Router) {
+			r.Use(auth.JWTMiddleware)
+			
+			// Register order routes
+			operation.RegisterOrdersRoutes(api, dbConn, ch)
+		})
 
 		// Create the HTTP server.
 		server := http.Server{

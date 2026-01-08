@@ -14,6 +14,8 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
+replace github.com/PayeTonKawa-EPSI-2025/Common-V2 => ../Common-V2
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
