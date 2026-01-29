@@ -30,17 +30,21 @@ func PublishOrderEvent(ch *amqp.Channel, eventType events.EventType, order event
 	// Use a routing key based on the event type
 	routingKey := string(eventType)
 
-	err = ch.PublishWithContext(
-		ctx,
-		"events", // exchange
-		routingKey,
-		false, // mandatory
-		false, // immediate
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-		},
-	)
+	if ch != nil {
+		err = ch.PublishWithContext(
+			ctx,
+			"events", // exchange
+			routingKey,
+			false, // mandatory
+			false, // immediate
+			amqp.Publishing{
+				ContentType: "application/json",
+				Body:        body,
+			},
+		)
+	} else {
+		log.Println("RabbitMQ disabled: skipping event publish")
+	}
 
 	if err != nil {
 		log.Printf("Error publishing message: %v", err)

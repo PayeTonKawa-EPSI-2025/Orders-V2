@@ -1,0 +1,96 @@
+name: API Functional & Security Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+jobs:
+  api_tests_and_security:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_DSN: postgresql://test:test@localhost:5432/testdb
+      DISABLE_RABBITMQ: "true"
+      POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      # Wait for Postgres to be ready
+      - name: Wait for Postgres
+        run: |
+          echo "Waiting for Postgres..."
+          until pg_isready -h localhost -p 5432 -U test; do
+            sleep 1
+          done
+
+      # Start Go service in background
+      - name: Start Go API service
+        run: |
+          echo "Starting Go API..."
+          go run ./cmd/main.go -p 8080 &
+          echo $! > go.pid
+
+      # Wait for Go service to be healthy
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            echo "Checking API (attempt $i)..."
+            if curl -sf http://localhost:8080/health; then
+              echo "API is up!"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to start in time"
+          exit 1
+
+      # Install Postman CLI
+      - name: Install Postman CLI
+        run: |
+          curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+
+      - name: Login to Postman CLI
+        run: postman login --with-api-key "$POSTMAN_API_KEY"
+
+      # Run Postman collection
+      - name: Run Postman API tests
+        run: |
+          postman collection run 25203538-6bb05f96-8ac2-459b-a5f4-d85bb5f31d44 -e 25203538-8eb2521d-3c02-4759-a67f-e17079ec039b
+
+      # Run ZAP OpenAPI scan on the same running API
+      - name: OWASP ZAP OpenAPI Scan
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d
+        with:
+          target: "http://localhost:8080/swagger.json"
+          format: openapi
+          fail_action: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Cleanup: stop Go service
+      - name: Stop Go service
+        run: |
+          kill $(cat go.pid) || true
