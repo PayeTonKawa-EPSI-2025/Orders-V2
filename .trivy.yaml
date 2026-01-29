@@ -1,0 +1,8 @@
+severity:
+  - HIGH
+  - CRITICAL
+exit-code: 1
+ignore-unfixed: true
+vuln-type:
+  - library
+  - os
