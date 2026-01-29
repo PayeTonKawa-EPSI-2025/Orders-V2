@@ -52,36 +52,40 @@ func SeedDB(t *testing.T, db *gorm.DB) {
 	orders := []models.Order{
 		{
 			CustomerID: 1,
-			Products:   [		{
-			Name:  "Product A",
-			Stock: 55,
-			Details: models.ProductDetails{
-				Price:       4.2,
-				Description: "This is product A",
-				Color:       "Blue",
+			Products: []models.Product{
+				{
+					Name:  "Product A",
+					Stock: 55,
+					Details: models.ProductDetails{
+						Price:       4.2,
+						Description: "This is product A",
+						Color:       "Blue",
+					},
+				},
+				{
+					Name:  "Product B",
+					Stock: 42,
+					Details: models.ProductDetails{
+						Price:       5.3,
+						Description: "This is product B",
+						Color:       "Red",
+					},
+				},
 			},
-		},
-		{
-			Name:  "Product B",
-			Stock: 42,
-			Details: models.ProductDetails{
-				Price:       5.3,
-				Description: "This is product B",
-				Color:       "Red",
-			},
-		},],
 		},
 		{
 			CustomerID: 2,
-			Products:   [{
-			Name:  "Product B",
-			Stock: 42,
-			Details: models.ProductDetails{
-				Price:       5.3,
-				Description: "This is product B",
-				Color:       "Red",
+			Products: []models.Product{
+				{
+					Name:  "Product B",
+					Stock: 42,
+					Details: models.ProductDetails{
+						Price:       5.3,
+						Description: "This is product B",
+						Color:       "Red",
+					},
+				},
 			},
-		}]
 		},
 	}
 
