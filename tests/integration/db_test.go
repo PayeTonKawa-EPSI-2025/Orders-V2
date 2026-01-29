@@ -52,17 +52,42 @@ func SeedDB(t *testing.T, db *gorm.DB) {
 	orders := []models.Order{
 		{
 			CustomerID: 1,
-			Products:   []uint{1, 2},
+			Products:   [		{
+			Name:  "Product A",
+			Stock: 55,
+			Details: models.ProductDetails{
+				Price:       4.2,
+				Description: "This is product A",
+				Color:       "Blue",
+			},
+		},
+		{
+			Name:  "Product B",
+			Stock: 42,
+			Details: models.ProductDetails{
+				Price:       5.3,
+				Description: "This is product B",
+				Color:       "Red",
+			},
+		},],
 		},
 		{
 			CustomerID: 2,
-			Products:   []uint{2, 3},
+			Products:   [{
+			Name:  "Product B",
+			Stock: 42,
+			Details: models.ProductDetails{
+				Price:       5.3,
+				Description: "This is product B",
+				Color:       "Red",
+			},
+		}]
 		},
 	}
 
 	for _, c := range orders {
 		if err := db.Create(&c).Error; err != nil {
-			t.Fatalf("failed to seed order %s: %v", c.Name, err)
+			t.Fatalf("failed to seed order %s: %v", c.CustomerID, err)
 		}
 	}
 
