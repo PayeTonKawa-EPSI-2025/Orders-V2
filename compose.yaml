@@ -1,20 +1,4 @@
 services:
-  api:
-    image: ghcr.io/payetonkawa-epsi-2025/orders-v2/paye-ton-kawa--orders
-    container_name: orders-api
-    environment:
-      - DATABASE_DSN=postgres://postgresadmin:postgresadmin@database:5432/orders
-      - RABBIT_DSN=amqp://guest:guest@rabbit:5672
-    ports:
-      - 8082:8082
-    networks:
-      - default
-      - tpre814_network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.orders.rule=Host(`orders.localhost`)"
-      - "traefik.http.routers.orders.entrypoints=web"
-      - "traefik.http.services.orders.loadbalancer.server.port=8082"
   database:
     image: postgres:17.4-alpine
     environment:
@@ -28,8 +12,3 @@ services:
 
 volumes:
   db_data:
-
-networks:
-  tpre814_network:
-    external: true
-    name: TPRE814
