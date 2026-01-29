@@ -91,7 +91,7 @@ func SeedDB(t *testing.T, db *gorm.DB) {
 
 	for _, c := range orders {
 		if err := db.Create(&c).Error; err != nil {
-			t.Fatalf("failed to seed order %s: %v", c.CustomerID, err)
+			t.Fatalf("failed to seed order %d: %v", c.CustomerID, err)
 		}
 	}
 
